@@ -1,0 +1,15 @@
+sample:
+  name: ola-home smart lamp
+  description: Dimmable lamp with rotary encoder, on/off and off-timer
+common:
+  build_only: true
+  sysbuild: true
+  platform_allow:
+    - esp32c3_supermini
+  integration_platforms:
+    - esp32c3_supermini
+tests:
+  app.lamp: {}
+  app.lamp.cct:
+    extra_args:
+      - EXTRA_DTC_OVERLAY_FILE=variants/cct.overlay

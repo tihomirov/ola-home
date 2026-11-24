@@ -1,0 +1,11 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Variant: CCT (warm/cool white) strip — same behavior, different hardware.
+ * Build with:
+ *   west build -b esp32c3_supermini --sysbuild firmware/apps/lamp -- \
+ *     -DEXTRA_DTC_OVERLAY_FILE=variants/cct.overlay
+ *
+ * TODO: add a second LEDC channel (e.g. GPIO3) and a color-temperature
+ * capability once the hardware is chosen.
+ */

@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+
+menu "Ola Home (hiot)"
+
+config HIOT_CORE
+	bool "hiot core: capability registry and command routing"
+	select HWINFO
+	help
+	  Core of the home IoT firmware. Holds the capability registry,
+	  produces config/state documents and routes commands to
+	  capabilities.
+
+if HIOT_CORE
+
+config HIOT_DEVICE_TYPE
+	string "Device type"
+	default "generic"
+	help
+	  Device type string (e.g. "lamp"). Used only for UI grouping and
+	  OTA image selection. Behavior comes from capabilities.
+
+config HIOT_FW_VERSION
+	string "Firmware version"
+	default "0.1.0"
+
+rsource "lib/caps/Kconfig"
+
+module = HIOT
+module-str = hiot
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # HIOT_CORE
+
+endmenu

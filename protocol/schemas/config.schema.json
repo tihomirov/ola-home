@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ola-home/protocol/config.schema.json",
+  "title": "Device config (home/{id}/config)",
+  "type": "object",
+  "required": ["device_type", "fw_version", "capabilities"],
+  "properties": {
+    "device_type": { "type": "string" },
+    "fw_version": { "type": "string" },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "name"],
+        "properties": {
+          "type": { "enum": ["switch", "brightness", "timer"] },
+          "name": { "type": "string" }
+        }
+      }
+    }
+  }
+}

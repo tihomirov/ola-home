@@ -1,0 +1,10 @@
+description: |
+  hiot switch capability (on/off). Optionally controls another capability
+  (e.g. a brightness node: on restores last level, off sets 0).
+
+compatible: "hiot,switch"
+
+properties:
+  target:
+    type: phandle
+    description: Capability node this switch controls.

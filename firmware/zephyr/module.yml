@@ -1,0 +1,9 @@
+# Zephyr module definition for the ola-home firmware ("hiot" = home IoT).
+# Apps pull this module in via ZEPHYR_EXTRA_MODULES (see apps/*/CMakeLists.txt).
+name: ola_home
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    dts_root: .
+    board_root: .

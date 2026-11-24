@@ -1,0 +1,94 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Smart lamp on ESP32-C3 SuperMini.
+ *
+ *   GPIO4  PWM -> D4184 MOSFET (20 kHz)
+ *   GPIO5  encoder CLK
+ *   GPIO6  encoder DT
+ *   GPIO7  encoder SW (internal pull-up)
+ *
+ * Avoid GPIO2/8/9 (strapping), 18/19 (USB), 20/21 (UART).
+ */
+
+#include <zephyr/dt-bindings/pinctrl/esp32c3-pinctrl.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+&pinctrl {
+	ledc0_default: ledc0_default {
+		group1 {
+			pinmux = <LEDC_CH0_GPIO4>;
+			output-enable;
+		};
+	};
+};
+
+&ledc0 {
+	pinctrl-0 = <&ledc0_default>;
+	pinctrl-names = "default";
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel0@0 {
+		reg = <0x0>;
+		timer = <0>;
+	};
+};
+
+&wifi {
+	status = "okay";
+};
+
+/ {
+	/* ---- Capabilities ---- */
+
+	lamp_brightness: lamp-brightness {
+		compatible = "hiot,brightness";
+		pwms = <&ledc0 0 PWM_HZ(20000) PWM_POLARITY_NORMAL>;
+		fade-ms = <300>;
+	};
+
+	lamp_switch: lamp-switch {
+		compatible = "hiot,switch";
+		target = <&lamp_brightness>;
+	};
+
+	lamp_timer: lamp-timer {
+		compatible = "hiot,timer";
+		target = <&lamp_switch>;
+		presets-min = <15 30 60>;
+	};
+
+	/* ---- Local input ---- */
+
+	encoder: encoder {
+		compatible = "gpio-qdec";
+		gpios = <&gpio0 5 (GPIO_PULL_UP | GPIO_ACTIVE_HIGH)>,
+			<&gpio0 6 (GPIO_PULL_UP | GPIO_ACTIVE_HIGH)>;
+		steps-per-period = <4>;
+		zephyr,axis = <INPUT_REL_WHEEL>;
+		sample-time-us = <2000>;
+		idle-timeout-ms = <200>;
+	};
+
+	buttons: buttons {
+		compatible = "gpio-keys";
+
+		encoder_sw: encoder_sw {
+			gpios = <&gpio0 7 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_ENTER>;
+		};
+	};
+
+	longpress: longpress {
+		compatible = "zephyr,input-longpress";
+		input = <&buttons>;
+		input-codes = <INPUT_KEY_ENTER>;
+		short-codes = <INPUT_KEY_A>;
+		long-codes = <INPUT_KEY_X>;
+		long-delay-ms = <800>;
+	};
+};

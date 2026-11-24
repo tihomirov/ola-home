@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "llvm-vs-code-extensions.vscode-clangd",
+    "nordic-semiconductor.nrf-devicetree",
+    "nordic-semiconductor.nrf-kconfig",
+    "ms-vscode.cmake-tools",
+    "redhat.vscode-yaml",
+    "editorconfig.editorconfig"
+  ],
+  "unwantedRecommendations": ["ms-vscode.cpptools"]
+}

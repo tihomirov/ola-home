@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "app",
+      "type": "pickString",
+      "description": "Firmware app",
+      "options": ["lamp"],
+      "default": "lamp"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "fw: build",
+      "type": "shell",
+      "command": "west build -b esp32c3_supermini --sysbuild -d build firmware/apps/${input:app}",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "fw: pristine build",
+      "type": "shell",
+      "command": "west build -p always -b esp32c3_supermini --sysbuild -d build firmware/apps/${input:app}",
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "fw: flash",
+      "type": "shell",
+      "command": "west flash -d build",
+      "problemMatcher": []
+    },
+    {
+      "label": "fw: monitor",
+      "type": "shell",
+      "command": "west espressif monitor",
+      "problemMatcher": []
+    },
+    {
+      "label": "fw: menuconfig",
+      "type": "shell",
+      "command": "west build -d build -t menuconfig",
+      "problemMatcher": []
+    },
+    {
+      "label": "deploy: up",
+      "type": "shell",
+      "command": "docker compose -f deploy/docker-compose.yml up -d",
+      "problemMatcher": []
+    }
+  ]
+}

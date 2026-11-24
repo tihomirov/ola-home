@@ -1,0 +1,31 @@
+name: firmware
+
+on:
+  push:
+    branches: [main]
+    paths: ["firmware/**", "west.yml", ".github/workflows/firmware.yml"]
+  pull_request:
+    paths: ["firmware/**", "west.yml", ".github/workflows/firmware.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ola-home
+
+      - name: Set up Zephyr workspace
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: ola-home
+          toolchains: riscv64-zephyr-elf
+
+      - name: Fetch Espressif blobs
+        run: west blobs fetch hal_espressif
+
+      - name: Build all firmware apps (twister, build only)
+        working-directory: ola-home
+        run: west twister -T firmware/apps -v --inline-logs --integration

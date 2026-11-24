@@ -1,0 +1,14 @@
+{
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build",
+    "--header-insertion=never",
+    "--query-driver=**/riscv64-zephyr-elf-gcc*"
+  ],
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "cmake.configureOnOpen": false,
+  "files.associations": {
+    "*.overlay": "dts",
+    "*.conf": "properties",
+    "Kconfig*": "kconfig"
+  }
+}

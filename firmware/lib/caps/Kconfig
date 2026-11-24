@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config HIOT_CAP_SWITCH
+	bool "switch capability"
+	default y
+	depends on DT_HAS_HIOT_SWITCH_ENABLED
+
+config HIOT_CAP_BRIGHTNESS
+	bool "brightness capability (PWM)"
+	default y
+	depends on DT_HAS_HIOT_BRIGHTNESS_ENABLED
+	select PWM
+
+config HIOT_CAP_TIMER
+	bool "off-timer capability"
+	default y
+	depends on DT_HAS_HIOT_TIMER_ENABLED

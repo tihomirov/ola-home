@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ola-home/protocol/set.schema.json",
+  "title": "Device command (home/{id}/set)",
+  "description": "Map of capability instance name -> that capability's command object.",
+  "type": "object",
+  "additionalProperties": { "type": "object" },
+  "minProperties": 1
+}

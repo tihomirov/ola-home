@@ -1,0 +1,36 @@
+# Home server stack. Run on the home box (Raspberry Pi / mini PC):
+#   cp .env.example .env   # then edit
+#   docker compose up -d
+#
+# Broker and DB are bound to the LAN / Tailscale interface only; never
+# expose them to the internet.
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - mosquitto-data:/mosquitto/data
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # backend:   (step 6 - language/framework not decided yet)
+  # nginx:     (step 7 - serves the SPA, proxies /api and /ws to backend)
+
+volumes:
+  mosquitto-data:
+  postgres-data:

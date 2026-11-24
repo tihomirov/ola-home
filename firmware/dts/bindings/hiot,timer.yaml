@@ -1,0 +1,15 @@
+description: |
+  hiot off-timer capability. Turns the target capability off after a delay.
+
+compatible: "hiot,timer"
+
+properties:
+  target:
+    type: phandle
+    required: true
+    description: Capability node to turn off (usually a hiot,switch).
+
+  presets-min:
+    type: array
+    default: [15, 30, 60]
+    description: Timer presets in minutes, cycled by local input.

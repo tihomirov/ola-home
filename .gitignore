@@ -1,0 +1,25 @@
+# Zephyr / west
+build/
+build-*/
+twister-out*/
+.cache/
+compile_commands.json
+
+# Deploy secrets
+deploy/.env
+deploy/mosquitto/passwd
+
+# Node / web
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+*.swp
+.idea/

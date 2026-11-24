@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ola-home/protocol/capabilities/timer.schema.json",
+  "title": "timer capability (off-timer)",
+  "$defs": {
+    "describe": {
+      "type": "object",
+      "properties": {
+        "presets": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+      }
+    },
+    "state": {
+      "type": "object",
+      "required": ["remaining_min"],
+      "properties": { "remaining_min": { "type": "integer", "minimum": 0 } },
+      "additionalProperties": false
+    },
+    "set": {
+      "type": "object",
+      "required": ["minutes"],
+      "properties": { "minutes": { "type": "integer", "minimum": 0, "description": "0 cancels the timer" } },
+      "additionalProperties": false
+    }
+  }
+}

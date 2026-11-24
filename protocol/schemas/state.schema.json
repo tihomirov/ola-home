@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ola-home/protocol/state.schema.json",
+  "title": "Device state (home/{id}/state)",
+  "description": "Map of capability instance name -> that capability's state object.",
+  "type": "object",
+  "additionalProperties": { "type": "object" }
+}

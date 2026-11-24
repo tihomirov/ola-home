@@ -1,0 +1,33 @@
+# West manifest for ola-home.
+#
+# This repository is the manifest repository. Zephyr and its modules are
+# checked out as siblings of this repo inside a west workspace:
+#
+#   mkdir ola-workspace && cd ola-workspace
+#   git clone https://github.com/tihomirov/ola-home.git
+#   west init -l ola-home
+#   west update
+#   west blobs fetch hal_espressif
+#
+manifest:
+  version: "0.13"
+
+  self:
+    path: ola-home
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.3.0
+      import:
+        # Only pull the modules we actually need.
+        name-allowlist:
+          - hal_espressif
+          - mcuboot
+          - mbedtls
+          - picolibc
+          - zcbor

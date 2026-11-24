@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ola-home/protocol/capabilities/brightness.schema.json",
+  "title": "brightness capability",
+  "$defs": {
+    "describe": {
+      "type": "object",
+      "required": ["min", "max"],
+      "properties": {
+        "min": { "type": "integer" },
+        "max": { "type": "integer" }
+      }
+    },
+    "state": {
+      "type": "object",
+      "required": ["level"],
+      "properties": { "level": { "type": "integer", "minimum": 0, "maximum": 100 } },
+      "additionalProperties": false
+    },
+    "set": { "$ref": "#/$defs/state" }
+  }
+}

@@ -1,0 +1,16 @@
+description: |
+  hiot brightness capability. Dimmable output driven by one PWM channel
+  (gamma-corrected, with fades).
+
+compatible: "hiot,brightness"
+
+properties:
+  pwms:
+    type: phandle-array
+    required: true
+    description: PWM channel driving the LED MOSFET.
+
+  fade-ms:
+    type: int
+    default: 300
+    description: Fade duration between levels in milliseconds.

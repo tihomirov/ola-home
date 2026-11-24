@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ola-home/protocol/capabilities/switch.schema.json",
+  "title": "switch capability",
+  "$defs": {
+    "state": {
+      "type": "object",
+      "required": ["on"],
+      "properties": { "on": { "type": "boolean" } },
+      "additionalProperties": false
+    },
+    "set": { "$ref": "#/$defs/state" }
+  }
+}
