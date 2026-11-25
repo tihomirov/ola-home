@@ -114,11 +114,17 @@ Variant: add `-- -DEXTRA_DTC_OVERLAY_FILE=variants/cct.overlay`
 - Optional dev container (Zephyr CI image); flash from host
 - Alternative: CLion (free non-commercial)
 
-## Open decisions
+## Decisions
+Decided (details in [spec/server.md](spec/server.md) §13):
+- Backend: Python + FastAPI
+- Tenancy: several households per server; local server now, hosted later
+- Provisioning: SoftAP + captive portal + QR setup sticker (works on iPhone and Android); not BLE
+- MQTT over TLS: own CA locally, Let's Encrypt when hosted
+- Commands to offline devices: short server-side queue (60 s default)
+
+Still open:
 - Light source confirmation (12V strip length/wattage → power budget)
-- Backend language/framework
 - SPA framework (React or Vue)
-- Provisioning method (BLE vs captive portal)
 - OTA transport (MQTT vs HTTP)
 
 ## Implementation order

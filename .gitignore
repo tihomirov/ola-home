@@ -8,6 +8,12 @@ compile_commands.json
 # Deploy secrets
 deploy/.env
 deploy/mosquitto/passwd
+deploy/mosquitto/certs/*
+!deploy/mosquitto/certs/.gitkeep
+
+# TLS keys anywhere in the repo
+*.key
+*.csr
 
 # Node / web
 node_modules/

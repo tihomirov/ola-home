@@ -1,9 +1,11 @@
 # server
 
-Backend: device registry (built from `home/+/config` messages), rules, Postgres,
-REST for CRUD and WebSocket for live state.
+Backend: users, homes, roles, device registry, REST API + WebSocket for the SPA,
+and the MQTT side that talks to devices through Mosquitto.
 
-Talks to devices only through the MQTT broker. Has an adapter interface for
-device sources (own MQTT devices now, Zigbee2MQTT later).
+Spec: [docs/spec/server.md](../docs/spec/server.md).
 
-**Open decision:** language / framework. Implementation is step 6.
+Stack (decided): **Python 3.13, FastAPI**, Uvicorn, Pydantic v2, SQLAlchemy 2 (async) +
+asyncpg, Alembic, aiomqtt, argon2-cffi, pytest.
+
+Not started yet (implementation order step 6).

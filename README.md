@@ -5,6 +5,8 @@ web SPA to manage and control them. Starts with one device (a smart lamp on
 ESP32-C3) and is designed to grow to many device types.
 
 Full design brief: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
+Server spec (draft): [docs/spec/server.md](docs/spec/server.md).
+Firmware Wi-Fi setup + pairing spec: [firmware/lib/hiot_provision/README.md](firmware/lib/hiot_provision/README.md).
 
 ## Architecture
 

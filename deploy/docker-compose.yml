@@ -1,19 +1,24 @@
 # Home server stack. Run on the home box (Raspberry Pi / mini PC):
-#   cp .env.example .env   # then edit
+#   cp .env.example .env                                  # then edit
+#   ../tools/certs/mkcerts.sh ca                          # once, on your PC
+#   ../tools/certs/mkcerts.sh broker <broker-name-or-ip>  # writes mosquitto/certs/
 #   docker compose up -d
 #
-# Broker and DB are bound to the LAN / Tailscale interface only; never
-# expose them to the internet.
+# Postgres is never exposed. The broker is exposed only as MQTT over TLS (8883).
 
 services:
   mosquitto:
     image: eclipse-mosquitto:2
     restart: unless-stopped
     ports:
-      - "1883:1883"
+      # Devices connect over TLS only. Plain 1883 stays inside the docker network.
+      - "8883:8883"
+      # First firmware bring-up only, remove before pairing:
+      # - "1883:1883"
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - ./mosquitto/certs:/mosquitto/config/certs:ro
       - mosquitto-data:/mosquitto/data
 
   postgres:
