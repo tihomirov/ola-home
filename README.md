@@ -6,6 +6,7 @@ ESP32-C3) and is designed to grow to many device types.
 
 Full design brief: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
 Server spec (draft): [docs/spec/server.md](docs/spec/server.md).
+Web app spec (draft): [docs/spec/web.md](docs/spec/web.md).
 Firmware Wi-Fi setup + pairing spec: [firmware/lib/hiot_provision/README.md](firmware/lib/hiot_provision/README.md).
 
 ## Architecture

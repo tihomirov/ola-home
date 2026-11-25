@@ -121,10 +121,10 @@ Decided (details in [spec/server.md](spec/server.md) §13):
 - Provisioning: SoftAP + captive portal + QR setup sticker (works on iPhone and Android); not BLE
 - MQTT over TLS: own CA locally, Let's Encrypt when hosted
 - Commands to offline devices: short server-side queue (60 s default)
+- Web: React + TypeScript, Tailwind + Radix (restyled later from design mockups), English + Ukrainian ([spec/web.md](spec/web.md))
 
 Still open:
 - Light source confirmation (12V strip length/wattage → power budget)
-- SPA framework (React or Vue)
 - OTA transport (MQTT vs HTTP)
 
 ## Implementation order

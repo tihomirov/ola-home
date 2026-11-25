@@ -102,17 +102,19 @@ erDiagram
   DEVICE ||--o{ STATE_SAMPLE : history
   DEVICE ||--o{ COMMAND : receives
   USER ||--o{ SESSION : has
+  USER ||--o{ PASSWORD_RESET : has
   HOME ||--o{ AUDIT_LOG : records
 ```
 
 | Entity | Purpose | Key fields |
 |---|---|---|
-| **user** | A person who logs in | `id`, `email` (unique), `display_name`, `password_hash` (argon2id), `is_admin`, `disabled_at`, `created_at` |
+| **user** | A person who logs in | `id`, `email` (unique), `display_name`, `password_hash` (argon2id), `locale` (`en`/`uk`), `is_admin`, `disabled_at`, `created_at` |
 | **session** | Login session (opaque token in cookie) | `id`, `user_id`, `token_hash`, `created_at`, `last_seen_at`, `expires_at`, `user_agent`, `ip` |
 | **home** | A set of devices (an apartment, a cottage, "lab bench") | `id`, `name`, `timezone`, `created_at` |
 | **home_member** | User's role in a home | `home_id`, `user_id`, `role`, `device_allowlist` (guest only), `expires_at` (guest only) |
 | **invitation** | Pending invite into a home | `id`, `home_id`, `email`, `role`, `token_hash`, `expires_at`, `invited_by` |
 | **room** | Optional grouping inside a home | `id`, `home_id`, `name`, `sort_order` |
+| **password_reset** | One-time reset link made by an admin | `id`, `user_id`, `token_hash`, `expires_at`, `used_at`, `created_by` |
 | **device** | A physical (or bridged) device | `id` (uuid), `hw_id` (from `hwinfo`, unique), `home_id`, `room_id`, `name`, `icon`, `adapter` (`hiot`/`z2m`), `model`, `fw_version`, `descriptor` (jsonb, last `config`), `state` (jsonb, last `state`), `settings_desired` (jsonb), `settings_rev`, `online`, `last_seen_at`, `created_at` |
 | **pairing** | One-time "add a device" session | `id`, `home_id`, `code_hash`, `created_by`, `expires_at`, `status`, `device_id` |
 | **command** | Command sent to a device: offline queue, correlation, audit | `id` (= `cid`), `device_id`, `user_id`, `payload`, `status` (`queued`/`sent`/`ok`/`error`/`timeout`/`expired`/`superseded`), `expires_at`, `created_at`, `sent_at`, `completed_at` |
@@ -159,6 +161,10 @@ Rules:
 - Guests can have an `expires_at` (e.g. a house-sitter for a week) and a device allowlist.
 - Permissions are a code-level table (`role → set of actions`), checked in one place.
   No per-user permission editing UI at first.
+- Permission names (returned to the web app as `my_permissions`, see [web.md §11](web.md)):
+  `device.view`, `device.control`, `device.settings`, `device.manage` (rename, move, remove),
+  `device.pair`, `room.manage`, `history.view`, `member.view`, `member.manage`, `member.manage_roles`,
+  `home.manage` (rename, timezone), `home.delete`, `home.transfer`, `audit.view`.
 
 ## 5. Device protocol (MQTT)
 
@@ -395,13 +401,18 @@ Base: `/api/v1`. JSON only. Same origin as the SPA (served by Nginx).
 | `GET /me` · `PATCH /me` · `POST /me/password` | user | Own profile |
 | `GET /me/sessions` · `DELETE /me/sessions/{id}` | user | Manage own sessions |
 | `GET/POST/PATCH/DELETE /admin/users[/{id}]` | admin | User management |
-| `GET /homes` · `POST /homes` | user | My homes (with my role) · create home (caller becomes owner) |
-| `GET/PATCH/DELETE /homes/{homeId}` | member / owner | Home details, rename, delete |
+| `POST /admin/users/{id}/reset-link` | admin | One-time password-reset link (24 h) to hand to the user (no email yet) |
+| `POST /auth/reset` | anyone with a reset token | `{token, password}`: set a new password, invalidate all sessions |
+| `GET /homes` · `POST /homes` | user | My homes (each with `my_role`, `my_permissions`, device counts) · create home (caller becomes owner) |
+| `GET/PATCH/DELETE /homes/{homeId}` | member / owner | Home details (incl. `my_role`, `my_permissions`), rename/timezone, delete |
+| `POST /homes/{homeId}/leave` | member (not last owner) | Leave the home |
+| `POST /homes/{homeId}/transfer-ownership` | owner | `{user_id}`: make another member owner (caller becomes manager) |
 | `GET /homes/{homeId}/members` | member | Members list |
 | `PATCH/DELETE /homes/{homeId}/members/{userId}` | owner / manager | Change role, remove |
 | `POST /homes/{homeId}/invitations` · `GET` · `DELETE /{id}` | owner / manager | Invite by email + role |
-| `POST /invitations/{token}/accept` | user (or new user) | Join the home |
-| `GET/POST/PATCH/DELETE /homes/{homeId}/rooms[/{roomId}]` | manager+ (read: member) | Rooms |
+| `GET /invitations/{token}` | anyone with the link | Preview: home name, inviter, role, expiry |
+| `POST /invitations/{token}/accept` | user, or new user | Join the home. Signed out: body `{display_name, email, password}` creates the account and signs in |
+| `GET/POST/PATCH/DELETE /homes/{homeId}/rooms[/{roomId}]` | manager+ (read: member) | Rooms (`PATCH` also takes `sort_order`) |
 | **`GET /homes/{homeId}/devices`** | member | **All devices with descriptor, state, settings, online.** The SPA builds the UI from this. |
 | `GET /devices/{deviceId}` | member | One device |
 | `PATCH /devices/{deviceId}` | manager+ | Name, room, icon |
@@ -410,7 +421,7 @@ Base: `/api/v1`. JSON only. Same origin as the SPA (served by Nginx).
 | `GET /devices/{deviceId}/commands/{cid}` | member+ | Command status |
 | `PUT /devices/{deviceId}/settings` | manager+ | Update desired settings |
 | `GET /devices/{deviceId}/history?cap=&from=&to=` | member+ | Samples / events |
-| `POST /homes/{homeId}/pairings` | manager+ | Start pairing → one-time code (§7) |
+| `POST /homes/{homeId}/pairings` | manager+ | Start pairing → `{pairing_id, code, broker_host, expires_at}` (§7). `broker_host` is the address devices use (`ola.lan:8883`), from server config |
 | `GET /pairings/{id}` · `DELETE /pairings/{id}` | manager+ | Pairing status / cancel |
 | `GET /homes/{homeId}/audit` | manager+ | Audit log |
 | `GET /health` | anyone | Liveness (no details) |
