@@ -9,6 +9,7 @@
 
 #include <errno.h>
 
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/pwm.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/printk.h>
