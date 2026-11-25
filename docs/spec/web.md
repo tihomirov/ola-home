@@ -84,6 +84,7 @@ flowchart TB
 | `/h/:homeId/activity` | Audit log | `audit.view` |
 | `/account` | Profile, password, sessions | signed in |
 | `/admin/users`, `/admin/system` | Instance admin | `is_admin` |
+| `/admin/firmware`, `/admin/rollouts[/:id]` | Firmware catalog and rollouts (§5.13) | `is_admin` |
 
 Navigation: on phones, a bottom bar (**Home** · **Add** · **Members** · **More**) plus a home
 switcher in the header. On desktop, a left sidebar with the same items.
@@ -102,6 +103,10 @@ switcher in the header. On desktop, a left sidebar with the same items.
 | My account | (by admin / invite) | `GET /me` | `PATCH /me`, `POST /me/password` | n/a | Account |
 | Session | login | `GET /me/sessions` | n/a | `DELETE /me/sessions/{id}`, logout | Account |
 | User (admin) | `POST /admin/users` | `GET /admin/users` | `PATCH /admin/users/{id}` (disable, admin flag), reset password | `DELETE /admin/users/{id}` | Admin |
+| Device firmware update | `POST /devices/{id}/ota` (update now) | `GET /devices/{id}/ota` + WS `ota.progress` | n/a | `DELETE /devices/{id}/ota` (cancel) | Device → Info |
+| Home update policy | n/a | in home payload | `PATCH /homes/{id}` (`ota_policy`, `ota_window`) | n/a | Home settings |
+| Firmware image (admin) | `POST /admin/firmware` (upload image + manifest) | `GET /admin/firmware` | n/a | `DELETE /admin/firmware/{id}` (if unused) | Admin → Firmware |
+| Rollout (admin) | `POST /admin/rollouts` | `GET /admin/rollouts[/{id}]` | start / pause / resume / abort | n/a | Admin → Rollouts |
 
 ## 5. Screens
 
@@ -169,7 +174,20 @@ Tabs (on desktop, sections side by side):
 | **Controls** | Every capability's **Detail** widget, in descriptor order. `system` goes last, collapsed |
 | **Settings** | Auto-generated form from all capabilities' `settings` descriptors (§7.4). Shows "Pending, applies when online" if `applied_rev < rev`. Needs `device.settings` |
 | **History** | Charts and event lists for capabilities with `history: true` (range: 24 h / 7 d / 30 d). Hidden if none |
-| **Info** | Name, room, icon (editable with `device.manage`), model, firmware, hw id, signal strength, uptime, added on/by. Actions: **Identify** (blink), **Restart**, **Remove device** |
+| **Info** | Name, room, icon (editable with `device.manage`), model, hw id, signal strength, uptime, added on/by. **Firmware** block (below). Actions: **Identify** (blink), **Restart**, **Remove device** |
+
+**Firmware block** (Info tab), data from `GET /devices/{id}/ota` + WS `ota.progress`:
+
+| Situation | Shows |
+|---|---|
+| Up to date | "Firmware 0.3.0 · up to date" |
+| Update available | "0.4.0 available", release notes (expandable), **Update now** (needs `device.update`) |
+| In progress | progress bar with the step: Downloading 35 % → Verifying → "Waiting until the light is off" → Restarting. **Cancel** while downloading or waiting |
+| Succeeded | toast "Desk lamp updated to 0.4.0", version updates |
+| Rolled back / failed | "Update to 0.4.0 failed, still on 0.3.0" + reason in plain words. No retry button for rollbacks (a fixed version comes from the admin) |
+
+The device card on the dashboard shows a small "Updating…" badge while a job is active,
+so an offline-looking device during the reboot doesn't alarm anyone.
 
 ### 5.6 Add device `/h/:homeId/add-device`
 The wizard in §9.
@@ -192,6 +210,10 @@ The wizard in §9.
 
 ### 5.9 Home settings `/h/:homeId/settings`
 - Rename, timezone (owner).
+- **Firmware updates** (`device.update`): **Automatic** or **Ask me first** (`ota_policy`),
+  and an install window ("Only between 02:00 and 05:00", in the home's timezone, or "Any time").
+  Explanation text: "Devices download updates in the background and restart only when not
+  in use (for lamps: when the light is off)."
 - **Leave home** (anyone except the last owner).
 - **Transfer ownership** (owner → pick a member, confirm).
 - **Delete home** (owner): lists what will happen ("4 devices will be removed and factory reset"),
@@ -212,6 +234,20 @@ Audit log list: time, who, what ("Anton removed Desk lamp"). Filter by type and 
   make admin, **reset password** (makes a one-time link to give the user), delete.
 - System: backend/broker/DB status, version, device counts (online/total), certificate expiry
   dates. No access to homes' devices (server §4).
+
+### 5.13 Admin: firmware and rollouts `/admin/firmware`, `/admin/rollouts`
+Implements server §13.
+
+- **Firmware catalog**: table per model (version, channel, size, uploaded, used by N devices).
+  **Upload**: pick `zephyr.signed.bin` + `manifest.json`. The server validates both (wrong
+  key, mismatched hash or version → clear error). Delete is allowed only if unused.
+- **New rollout**: pick firmware → targets (all devices of the model / chosen homes / chosen
+  devices, with a count preview) → stages (default `1 device → 10 % → 100 %`) → failure
+  threshold → urgent yes/no → **Create** (draft) → **Start**.
+- **Rollout page**: stage progress, counts per state (pending, downloading, waiting for idle,
+  succeeded, failed, rolled back), the list of failed devices with errors, buttons
+  **Pause / Resume / Abort**. Live via polling (5 s) while open.
+  The admin sees device hw ids, models and versions here, but **not** home contents (names, rooms, state).
 
 ## 6. Data loading and cache
 
@@ -352,6 +388,7 @@ sequenceDiagram
 | `device.added` / `device.removed` | insert / remove in list (+ toast) |
 | `command.result` | resolve pending command (§8.1) |
 | `pairing.completed` / `pairing.failed` | wizard step (§9) |
+| `ota.progress` | update the device's firmware block and card badge; toast on succeeded / failed / rolled back |
 | `home.updated` / `member.changed` | invalidate `['home']`, `['homes']`, `['members']`. If I lost access → leave to `/homes` with a message |
 
 ## 9. Add device wizard
@@ -409,7 +446,7 @@ The server returns, per home, `my_role` and `my_permissions` (server §6.2 addit
 
 ```json
 { "id": "...", "name": "Flat", "my_role": "manager",
-  "my_permissions": ["device.control", "device.manage", "device.settings", "device.pair",
+  "my_permissions": ["device.control", "device.manage", "device.settings", "device.pair", "device.update",
                      "room.manage", "member.manage", "audit.view", "history.view"] }
 ```
 
@@ -504,7 +541,8 @@ web/
     │   ├── rooms/
     │   ├── members/           # members, invitations
     │   ├── activity/
-    │   └── admin/
+    │   ├── ota/               # device firmware block, home update policy
+    │   └── admin/             # users, system, firmware catalog, rollouts
     ├── capabilities/          # widget registry (§7)
     │   ├── registry.ts
     │   ├── switch/ brightness/ timer/ motion/ system/ _fallback/
@@ -539,6 +577,9 @@ web/
 - Rooms CRUD
 - Members: list, invite link, roles, remove; accept invitation
 - Admin: users list/create/disable/reset password
+
+**With OTA (implementation order step 8):** device firmware block, home update policy,
+admin firmware catalog and rollouts.
 
 **Later:** History tab and charts, Activity (audit) screen, admin system page, guest
 allowlist UI, transfer ownership, scenes, schedules, automations, notifications, restyling to

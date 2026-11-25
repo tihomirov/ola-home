@@ -115,7 +115,7 @@ Variant: add `-- -DEXTRA_DTC_OVERLAY_FILE=variants/cct.overlay`
 - Alternative: CLion (free non-commercial)
 
 ## Decisions
-Decided (details in [spec/server.md](spec/server.md) §13):
+Decided (details in [spec/server.md](spec/server.md) §14):
 - Backend: Python + FastAPI
 - Tenancy: several households per server; local server now, hosted later
 - Provisioning: SoftAP + captive portal + QR setup sticker (works on iPhone and Android); not BLE
@@ -123,9 +123,10 @@ Decided (details in [spec/server.md](spec/server.md) §13):
 - Commands to offline devices: short server-side queue (60 s default)
 - Web: React + TypeScript, Tailwind + Radix (restyled later from design mockups), English + Ukrainian ([spec/web.md](spec/web.md))
 
+- Firmware updates (OTA): MQTT for offer/progress, HTTPS download, MCUboot signature check + automatic rollback, staged rollouts ([spec/server.md](spec/server.md) §13, [hiot_ota](../firmware/lib/hiot_ota/README.md))
+
 Still open:
 - Light source confirmation (12V strip length/wattage → power budget)
-- OTA transport (MQTT vs HTTP)
 
 ## Implementation order
 1. Repo scaffold: west.yml, module, bindings, hiot_core skeleton, lamp app building for esp32c3_supermini

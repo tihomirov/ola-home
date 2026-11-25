@@ -8,6 +8,7 @@ Full design brief: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
 Server spec (draft): [docs/spec/server.md](docs/spec/server.md).
 Web app spec (draft): [docs/spec/web.md](docs/spec/web.md).
 Firmware Wi-Fi setup + pairing spec: [firmware/lib/hiot_provision/README.md](firmware/lib/hiot_provision/README.md).
+Firmware OTA update spec: [firmware/lib/hiot_ota/README.md](firmware/lib/hiot_ota/README.md).
 
 ## Architecture
 

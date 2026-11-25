@@ -6,7 +6,8 @@ JSON shapes here become schemas in [`protocol/schemas/`](../../protocol/schemas/
 
 Decided: **Python + FastAPI** backend, **several households per server** (§2.1),
 **short queue for offline commands** (§5.5), **SoftAP + QR Wi-Fi setup** for every
-phone (§7.1), **MQTT over TLS** (§12.1). Status of every decision is in §13.
+phone (§7.1), **MQTT over TLS** (§12.1), **firmware updates: MQTT control + HTTPS
+download** (§13). Status of every decision is in §14.
 
 ---
 
@@ -110,11 +111,14 @@ erDiagram
 |---|---|---|
 | **user** | A person who logs in | `id`, `email` (unique), `display_name`, `password_hash` (argon2id), `locale` (`en`/`uk`), `is_admin`, `disabled_at`, `created_at` |
 | **session** | Login session (opaque token in cookie) | `id`, `user_id`, `token_hash`, `created_at`, `last_seen_at`, `expires_at`, `user_agent`, `ip` |
-| **home** | A set of devices (an apartment, a cottage, "lab bench") | `id`, `name`, `timezone`, `created_at` |
+| **home** | A set of devices (an apartment, a cottage, "lab bench") | `id`, `name`, `timezone`, `ota_policy` (`auto`/`notify`), `ota_window` (e.g. `02:00–05:00`), `created_at` |
 | **home_member** | User's role in a home | `home_id`, `user_id`, `role`, `device_allowlist` (guest only), `expires_at` (guest only) |
 | **invitation** | Pending invite into a home | `id`, `home_id`, `email`, `role`, `token_hash`, `expires_at`, `invited_by` |
 | **room** | Optional grouping inside a home | `id`, `home_id`, `name`, `sort_order` |
 | **password_reset** | One-time reset link made by an admin | `id`, `user_id`, `token_hash`, `expires_at`, `used_at`, `created_by` |
+| **firmware** | Uploaded firmware image (§13.2) | `id`, `model`, `version`, `channel`, `size`, `sha256`, `min_from_version`, `notes`, `file_path`, `uploaded_by`, `created_at` |
+| **ota_rollout** | Planned update of many devices (§13.3) | `id`, `firmware_id`, `target` (jsonb: devices / homes / all of model), `stages`, `failure_threshold`, `status`, `created_by`, `created_at` |
+| **ota_job** | One device's update (§13.3) | `id`, `rollout_id` (nullable for "update now"), `device_id`, `firmware_id`, `state`, `progress`, `error`, `from_version`, `created_at`, `updated_at` |
 | **device** | A physical (or bridged) device | `id` (uuid), `hw_id` (from `hwinfo`, unique), `home_id`, `room_id`, `name`, `icon`, `adapter` (`hiot`/`z2m`), `model`, `fw_version`, `descriptor` (jsonb, last `config`), `state` (jsonb, last `state`), `settings_desired` (jsonb), `settings_rev`, `online`, `last_seen_at`, `created_at` |
 | **pairing** | One-time "add a device" session | `id`, `home_id`, `code_hash`, `created_by`, `expires_at`, `status`, `device_id` |
 | **command** | Command sent to a device: offline queue, correlation, audit | `id` (= `cid`), `device_id`, `user_id`, `payload`, `status` (`queued`/`sent`/`ok`/`error`/`timeout`/`expired`/`superseded`), `expires_at`, `created_at`, `sent_at`, `completed_at` |
@@ -163,6 +167,7 @@ Rules:
   No per-user permission editing UI at first.
 - Permission names (returned to the web app as `my_permissions`, see [web.md §11](web.md)):
   `device.view`, `device.control`, `device.settings`, `device.manage` (rename, move, remove),
+  `device.update` (start/cancel a firmware update, change the home's update policy; owner + manager),
   `device.pair`, `room.manage`, `history.view`, `member.view`, `member.manage`, `member.manage_roles`,
   `home.manage` (rename, timezone), `home.delete`, `home.transfer`, `audit.view`.
 
@@ -182,7 +187,8 @@ Rules:
 | `hiot/{hw}/cmd` | S→D | 1 | no | Commands (change state, actions) |
 | `hiot/{hw}/cmd/res` | D→S | 1 | no | Command result, correlated by `cid` |
 | `hiot/{hw}/settings` | S→D | 1 | yes | Desired settings (server is source of truth) |
-| `hiot/{hw}/ota` | S→D | 1 | no | Firmware update offer (later) |
+| `hiot/{hw}/ota` | S→D | 1 | yes | Firmware update offer / cancel (§13.4) |
+| `hiot/{hw}/ota/status` | D→S | 1 | no | Update progress and result (§13.4) |
 | `hiot/provision/{hw}/req` | D→S | 1 | no | Pairing request with one-time code (§7) |
 | `hiot/provision/{hw}/res` | S→D | 1 | no | Pairing response with permanent credentials |
 
@@ -424,6 +430,12 @@ Base: `/api/v1`. JSON only. Same origin as the SPA (served by Nginx).
 | `POST /homes/{homeId}/pairings` | manager+ | Start pairing → `{pairing_id, code, broker_host, expires_at}` (§7). `broker_host` is the address devices use (`ola.lan:8883`), from server config |
 | `GET /pairings/{id}` · `DELETE /pairings/{id}` | manager+ | Pairing status / cancel |
 | `GET /homes/{homeId}/audit` | manager+ | Audit log |
+| `GET /devices/{deviceId}/ota` | member+ | Current version, available update (version, notes), current job + progress |
+| `POST /devices/{deviceId}/ota` · `DELETE` | `device.update` | Update now to the latest stable version for its model · cancel a pending job (§13.3) |
+| `GET/POST /admin/firmware` · `DELETE /admin/firmware/{id}` | admin | Firmware catalog: list, upload (image + manifest), delete if unused (§13.2) |
+| `GET/POST /admin/rollouts` · `GET /admin/rollouts/{id}` | admin | Create rollout, list, status with per-device jobs (§13.3) |
+| `POST /admin/rollouts/{id}/start\|pause\|resume\|abort` | admin | Control a rollout |
+| `GET /fw/{firmwareId}.bin?dev=&exp=&sig=` | device (signed URL) | Firmware download, validated by the backend, file served by Nginx (§13.5) |
 | `GET /health` | anyone | Liveness (no details) |
 | `GET /admin/system` | admin | Broker/DB status, device counts, versions |
 
@@ -613,6 +625,7 @@ Server → client:
 | `device.added` / `device.removed` | `{device}` / `{device_id}` |
 | `command.result` | `{cid, device_id, status (ok/error/timeout/expired/superseded), error}` |
 | `pairing.completed` / `pairing.failed` | `{pairing_id, device_id \| error}` |
+| `ota.progress` | `{device_id, job_id, state, progress, error, version}` |
 | `home.updated` / `member.changed` | membership or role changes (client refetches) |
 | `pong` | |
 
@@ -673,7 +686,7 @@ apart from the WS hub.
 | History / charts for sensors | ✅ | `history: true`, retention |
 | Audit log | ✅ | |
 | Identify (blink to find a device) | ✅ | `sys.identify` |
-| **OTA firmware updates** | ⏳ | firmware catalog per `model`, signed MCUboot images, staged rollout, `ota` topic |
+| **OTA firmware updates** | ✅ | §13: catalog per `model`, signed MCUboot images, staged rollouts, MQTT control + HTTPS download, automatic rollback |
 | **Scenes** | ⏳ | named set of commands ("Evening": lamp 30%) |
 | **Schedules** | ⏳ | time-based (needs home `timezone`, already in model) |
 | **Automations / rules** | ⏳ | trigger (event/state/time) → condition → action, server-side, across devices |
@@ -700,7 +713,7 @@ apart from the WS hub.
 | Input | JSON-schema validation of every API body and every device payload. Size limits. Command values checked against the descriptor |
 | Privacy | Instance admin does not see other homes' devices. History retention limits. Deleting a device deletes its data |
 | Secrets | `.env` / Docker secrets only. Least-privilege DB user. Broker admin credentials only in the backend |
-| Firmware | MCUboot signed images. The server distributes images but never holds the signing key |
+| Firmware | MCUboot signed images, verified by the bootloader before boot; no downgrades; short-lived signed download URLs. The server distributes images but never holds the signing key (§13.7) |
 | Audit | Pairing, removal, role changes, settings changes and logins are logged |
 
 ### 12.1 MQTT over TLS
@@ -734,7 +747,167 @@ Plan: plain MQTT on port 1883 only for the first bring-up of `hiot_net` on the
 developer's LAN. TLS is switched on before pairing is implemented, and 1883 is then
 disabled in `mosquitto.conf`.
 
-## 13. Decisions
+## 13. Firmware updates (OTA)
+
+### 13.1 Overview
+
+**Decided: MQTT for control, HTTPS for the file.**
+
+- **MQTT** (small messages, already connected and authenticated): the server **offers**
+  an update, and the device reports **progress and result**.
+- **HTTPS** (built for big files, resumable with Range requests): the device **downloads**
+  the image (~1 MB) from a short-lived signed URL. Nginx serves the file.
+- **MCUboot** on the device verifies the signature, swaps images, and **rolls back
+  automatically** if the new firmware doesn't confirm itself. Device side:
+  [`firmware/lib/hiot_ota/README.md`](../../firmware/lib/hiot_ota/README.md).
+
+```mermaid
+sequenceDiagram
+  participant A as Admin / owner
+  participant B as Backend
+  participant N as Nginx
+  participant M as Mosquitto
+  participant D as Device
+  A->>B: start rollout / "Update now"
+  B->>M: hiot/{hw}/ota {job, version, url, size, sha256} (retained)
+  M->>D: offer
+  D->>M: ota/status accepted
+  D->>N: GET /fw/{id}.bin (Range, resumable)
+  N-->>D: image → written to slot 1
+  D->>M: ota/status downloading 10%…100%, verifying
+  D->>M: ota/status rebooting
+  D->>D: MCUboot: check signature, swap, boot new image
+  D->>D: self-test (Wi-Fi + broker) → confirm image
+  D->>M: ota/status succeeded {version} + new config (fw)
+  B->>M: clear retained hiot/{hw}/ota
+  B-->>A: WS ota.progress / device.updated
+```
+
+### 13.2 Firmware catalog
+
+- Releases are built and **signed in CI** (or on the developer's PC). Output: `zephyr.signed.bin` + a manifest:
+  ```json
+  { "model": "lamp-c3", "version": "0.4.0", "channel": "stable",
+    "sha256": "…", "size": 1048576, "min_from_version": "0.2.0",
+    "notes": "Smoother fades, fixes timer drift" }
+  ```
+- The admin uploads both (`POST /admin/firmware`). The server checks:
+  - the file is an MCUboot image (header magic) and its version matches the manifest
+  - `sha256` and `size` match
+  - the signature verifies with the **public** key configured on the server. This catches
+    images signed with the wrong (e.g. development) key before any device sees them. The server
+    only has the public key, never the private one.
+- `model` must match a device's descriptor `model` (server §5.3). Images are never offered across models.
+- Channels: `stable` (default for everyone) and `beta` (only devices/homes opted in, later).
+- Files live on disk (`/data/firmware/`), not in Postgres. Deleting an image is allowed only if no rollout uses it.
+
+### 13.3 Rollouts and jobs
+
+**Rollout** (admin): firmware + targets (specific devices, homes, or "all devices of this model")
++ **stages**, e.g. `[1 device, 10 %, 100 %]`. The next stage starts automatically after
+the previous one finishes with no failures (or manually). The rollout **pauses itself** if
+failures reach `failure_threshold` (default: 2 devices or 10 %, whichever is first).
+
+**Update now** (owner/manager, permission `device.update`): updates one device to the latest
+`stable` version for its model, outside any rollout.
+
+**Job** = one device's update. States:
+
+```mermaid
+stateDiagram-v2
+  [*] --> pending
+  pending --> offered: inside install window, device online
+  offered --> downloading: device accepted
+  offered --> rejected: wrong_model / not_newer / too_old / no_space
+  downloading --> verifying
+  verifying --> waiting_idle: install "when_idle"
+  verifying --> rebooting
+  waiting_idle --> rebooting
+  rebooting --> succeeded: new version confirmed
+  rebooting --> rolled_back: new image failed self-test
+  downloading --> failed: download/hash/flash error (after retries)
+  offered --> expired: no progress for 24 h
+  pending --> cancelled
+  offered --> cancelled
+```
+
+**Home update policy** (owner/manager, on `home`):
+
+| Setting | Values | Effect |
+|---|---|---|
+| `ota_policy` | `auto` (default) / `notify` | `auto`: rollout jobs are offered automatically. `notify`: the job waits until someone taps **Update** in the web app |
+| `ota_window` | e.g. `02:00–05:00` (home timezone), or none | Offers are only sent inside the window |
+| install mode | `when_idle` (default) / `now` | `when_idle`: the device downloads at once but reboots only when idle (for the lamp: light off). "Update now" from the UI uses `now` |
+
+Security fixes can be marked `urgent` by the admin. They ignore `notify` and the window, but still respect `when_idle`.
+
+### 13.4 MQTT messages
+
+Offer, `hiot/{hw}/ota` (server → device, QoS 1, **retained** so an offline device gets it on reconnect):
+
+```json
+{ "v": 1, "job": "0193…", "version": "0.4.0", "size": 1048576, "sha256": "…",
+  "url": "https://ola.lan/fw/0193….bin?dev=a1b2…&exp=1764003600&sig=…",
+  "install": "when_idle" }
+```
+
+Cancel: `{ "v": 1, "job": "0193…", "cancel": true }`. After a job ends (any final state)
+the server clears the retained topic (empty payload).
+
+Status, `hiot/{hw}/ota/status` (device → server, QoS 1, not retained):
+
+```json
+{ "v": 1, "job": "0193…", "state": "downloading", "progress": 35 }
+{ "v": 1, "job": "0193…", "state": "waiting_idle" }
+{ "v": 1, "job": "0193…", "state": "succeeded", "version": "0.4.0" }
+{ "v": 1, "job": "0193…", "state": "rolled_back", "version": "0.3.0", "error": "not_confirmed" }
+{ "v": 1, "job": "0193…", "state": "rejected", "error": "not_newer" }
+```
+
+States: `accepted`, `downloading` (progress at least every 10 % or 5 s), `verifying`,
+`waiting_idle`, `rebooting`, `succeeded`, `failed`, `rolled_back`, `rejected`, `cancelled`.
+Errors: `wrong_model`, `not_newer`, `too_old`, `no_space`, `busy`, `download_failed`,
+`url_expired`, `hash_mismatch`, `flash_error`, `not_confirmed`, `invalid_image`.
+
+The device also always sends its running version in `config` (`fw`), so the server can confirm
+the result even if a status message is lost.
+
+### 13.5 HTTPS download
+
+- URL: `https://<host>/fw/<firmware_id>.bin?dev=<hw>&exp=<unix>&sig=<HMAC-SHA256>`, signed
+  with a server secret over `firmware_id|hw|exp`. Valid for **1 hour**, only for that device
+  and that file. A new offer (new URL) is sent if it expires.
+- Nginx passes the request to the backend (`auth_request`), which checks the signature, expiry and
+  that the job is active, then Nginx serves the file from disk with **Range** support
+  (resume after a dropped connection).
+- `<host>` comes from server config (local: same name as the broker, e.g. `ola.lan`; hosted:
+  the public domain). Its certificate must chain to a root built into the firmware (our CA
+  or ISRG, §12.1), so Nginx in local mode uses a certificate from our CA.
+- Downloads are rate-limited per device. Logs record device, file and result.
+
+### 13.6 Device side in short
+
+Download into slot 1 while the device keeps working → verify size + SHA-256 → (wait for idle)
+→ mark image for test → reboot → MCUboot verifies the signature and swaps → new firmware
+self-tests (Wi-Fi + broker + publishes `config` within 2 min) → confirms. If it never
+confirms (crash, hang, no network), the next reboot returns to the old image, which reports
+`rolled_back`. Full details: [`firmware/lib/hiot_ota/README.md`](../../firmware/lib/hiot_ota/README.md).
+
+### 13.7 Signing, versions and keys
+
+- Signature: **ECDSA P-256** (MCUboot `imgtool sign`), verified by MCUboot before every boot of a new image.
+- Version: semantic version from the git tag (`v0.4.0` → `0.4.0`), written into the MCUboot header.
+- **No downgrades**: the device rejects versions ≤ its own (`not_newer`). Recovery from a bad
+  release is a new, higher version, or USB flashing.
+- Keys:
+  - **Release key**: private key offline / CI secret only. The public half is built into MCUboot
+    and configured on the server (§13.2).
+  - **Development key**: for local builds only. Devices flashed with the dev key never accept release
+    images and vice versa, and the server refuses dev-signed uploads.
+  - MCUboot's built-in sample key (public, in Zephyr's source tree) must **never** be used for real devices.
+- MCUboot itself is never updated over the air. Only USB can replace the bootloader.
+
+## 14. Decisions
 
 | # | Topic | Status | Decision |
 |---|---|---|---|
@@ -743,5 +916,6 @@ disabled in `mosquitto.conf`.
 | 3 | MQTT TLS | **decided, in progress** | Required, with own CA locally and Let's Encrypt when hosted (§12.1). Done: CA/broker cert script, Mosquitto TLS listener. Next: firmware side with `hiot_net` |
 | 4 | Tenancy | **decided** | Several households per server; local now, hosted later (§2.1) |
 | 5 | Offline commands | **decided** | Short server-side queue, default TTL 60 s, max 300 s, coalesced per capability (§5.5) |
-| 6 | MQTT 5 vs `cid` in JSON | open | Spec uses `cid` (works on MQTT 3.1.1) |
-| 7 | Topic prefix `home/` → `hiot/` | open | Update `protocol/topics.md` and firmware once agreed |
+| 6 | Firmware updates | **decided** | MQTT for offer/progress + HTTPS download from Nginx with signed URLs; MCUboot with signature check and automatic rollback; staged rollouts; per-home policy (§13) |
+| 7 | MQTT 5 vs `cid` in JSON | open | Spec uses `cid` (works on MQTT 3.1.1) |
+| 8 | Topic prefix `home/` → `hiot/` | open | Update `protocol/topics.md` and firmware once agreed |
